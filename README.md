@@ -119,5 +119,3 @@ This project is licensed under the [MIT License](LICENSE).
 <div align="center">
   <i>Redefining Hardware Architecture, One Prompt at a Time.</i>
 </div>
-# AHA-Designer
-# AHA-Designer

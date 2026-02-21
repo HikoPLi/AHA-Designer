@@ -1,5 +1,5 @@
 import { useGraphStore } from "../store/useGraphStore";
-import { Settings, Bot, PlayCircle } from "lucide-react";
+import { Settings, Bot, PlayCircle, GitBranch, RefreshCw, Check, TerminalSquare } from "lucide-react";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { synthesizeArchitecture } from "./aiService";
@@ -10,8 +10,33 @@ export default function RightPanel() {
   const { nodes, selectedNodeId, updateNodeData, setGraph } = useGraphStore();
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
-  const [activeTab, setActiveTab] = useState<"properties" | "ai">("properties");
+  const [activeTab, setActiveTab] = useState<"properties" | "ai" | "git">("properties");
   const [simulationResult, setSimulationResult] = useState<any>(null);
+
+  // Git State
+  const [gitOutput, setGitOutput] = useState<string>("");
+  const [gitCommand, setGitCommand] = useState<string>("");
+  const [isGitRunning, setIsGitRunning] = useState(false);
+
+  const runGitCommand = async (args: string[]) => {
+    setIsGitRunning(true);
+    try {
+      const res: string = await invoke("execute_git_command", { args });
+      setGitOutput(res || "Command executed successfully (no output).");
+    } catch (e) {
+      setGitOutput(`Error:\n${e}`);
+    } finally {
+      setIsGitRunning(false);
+    }
+  };
+
+  const handleGitSubmit = () => {
+    if (!gitCommand.trim()) return;
+    const args = gitCommand.trim().split(" ").filter(Boolean);
+    if (args[0] === "git") args.shift(); // Remove 'git' if user typed it
+    runGitCommand(args);
+    setGitCommand("");
+  };
 
   const [chatInput, setChatInput] = useState("");
   const [chatLog, setChatLog] = useState<
@@ -173,6 +198,25 @@ export default function RightPanel() {
               style={{ verticalAlign: "middle", marginRight: "4px" }}
             />{" "}
             Copilot
+          </button>
+          <button
+            onClick={() => setActiveTab("git")}
+            style={{
+              background: "none",
+              border: "none",
+              color:
+                activeTab === "git"
+                  ? "var(--accent-primary)"
+                  : "var(--text-secondary)",
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            <GitBranch
+              size={18}
+              style={{ verticalAlign: "middle", marginRight: "4px" }}
+            />{" "}
+            Git
           </button>
         </div>
       </div>
@@ -556,6 +600,87 @@ export default function RightPanel() {
                 >
                   Send
                 </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", height: "100%" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h4 style={{ margin: 0, fontSize: "14px" }}>Git Integration</h4>
+              <button 
+                className="btn" 
+                onClick={() => runGitCommand(["status"])}
+                style={{ padding: "4px 8px" }}
+              >
+                <RefreshCw size={14} /> Status
+              </button>
+            </div>
+            
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button className="btn" onClick={() => runGitCommand(["add", "."])} style={{ flex: 1 }}>
+                Add All
+              </button>
+              <button className="btn" onClick={() => runGitCommand(["pull"])} style={{ flex: 1 }}>
+                Pull
+              </button>
+              <button className="btn" onClick={() => runGitCommand(["push"])} style={{ flex: 1 }}>
+                Push
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Execute Command</label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <div style={{ position: "relative", flex: 1 }}>
+                  <span style={{ position: "absolute", left: "8px", top: "8px", color: "var(--text-muted)", fontSize: "12px", fontFamily: "monospace" }}>git</span>
+                  <input
+                    type="text"
+                    value={gitCommand}
+                    onChange={(e) => setGitCommand(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleGitSubmit()}
+                    placeholder="commit -m 'update'"
+                    style={{
+                      width: "100%",
+                      background: "#000",
+                      border: "1px solid var(--border-color)",
+                      color: "#fff",
+                      padding: "6px 8px 6px 32px",
+                      borderRadius: "4px",
+                      fontFamily: "monospace",
+                      fontSize: "12px"
+                    }}
+                  />
+                </div>
+                <button 
+                  className="btn primary" 
+                  onClick={handleGitSubmit}
+                  disabled={isGitRunning}
+                >
+                  <TerminalSquare size={14} /> Run
+                </button>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px", minHeight: 0 }}>
+              <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Output</label>
+              <div style={{ 
+                flex: 1, 
+                background: "#000", 
+                border: "1px solid var(--border-color)", 
+                borderRadius: "6px", 
+                padding: "8px",
+                overflowY: "auto",
+                fontFamily: "monospace",
+                fontSize: "11px",
+                color: "var(--text-primary)",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-all"
+              }}>
+                {isGitRunning ? (
+                  <span style={{ color: "var(--text-muted)" }}>Executing...</span>
+                ) : (
+                  gitOutput || <span style={{ color: "var(--text-muted)" }}>No output yet. Run a command to see results.</span>
+                )}
               </div>
             </div>
           </div>

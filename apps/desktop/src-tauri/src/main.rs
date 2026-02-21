@@ -51,9 +51,26 @@ fn run_thermal_simulation(graph_json: &str, profile: &str) -> Result<String, Str
     Ok(stdout)
 }
 
+#[tauri::command]
+fn execute_git_command(args: Vec<String>) -> Result<String, String> {
+    let output = Command::new("git")
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to execute git command: {}", e))?;
+
+    let stdout = String::from_utf8(output.stdout).unwrap_or_default();
+    let stderr = String::from_utf8(output.stderr).unwrap_or_default();
+
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        Err(format!("Git error: {}\n{}", stderr, stdout))
+    }
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![greet, run_thermal_simulation])
+        .invoke_handler(tauri::generate_handler![greet, run_thermal_simulation, execute_git_command])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
