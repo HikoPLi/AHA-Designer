@@ -12,7 +12,7 @@
 
 <br />
 
-> **AHA Designer (AI Hardware Architect Designer)** is an enterprise-grade Electronic Design Automation (EDA) tool that merges the declarative power of Large Language Models with deterministic, physics-based execution engines. 
+> **AHA Designer (AI Hardware Architect Designer)** is an enterprise-grade Electronic Design Automation (EDA) tool that merges the declarative power of Large Language Models with deterministic, physics-based execution engines.
 
 Transform hardware engineering from manual schematic drafting into intelligent, prompt-driven architecture topology synthesis. Build complex Edge AI compute nodes, IoT gateways, and mixed-signal boards in minutes instead of weeks.
 
@@ -20,7 +20,7 @@ Transform hardware engineering from manual schematic drafting into intelligent, 
 
 ## ✨ Features
 
-- **� Multi-Model Copilot** 
+- **� Multi-Model Copilot**
   Native support for OpenAI `gpt-4o`, Aliyun `Qwen`, `DeepSeek`, and local private `Ollama` models. Chat naturally with your AI architect, rendered in rich GitHub-flavored Markdown.
 - **🎨 Infinite Node Canvas**
   Powered by `React Flow`. Experience a buttery-smooth dark UI with semantic zooming, snap-to-grid, orthogonal auto-routing, custom EDA pin/port nodes, and right-click context menus.
@@ -40,24 +40,24 @@ AHA Designer uses a modern, blazingly fast polyglot monorepo stack designed for 
 ```mermaid
 graph TD
     subgraph Client [Desktop Shell Frontend]
-        UI[Web UI: React + Tailwind + Zustand]
-        Flow[Canvas: React Flow (Node/Edge API)]
+        UI["Web UI: React + Tailwind + Zustand"]
+        Flow["Canvas: React Flow (Node/Edge API)"]
         UI --> Flow
     end
 
     subgraph IPC [Tauri Security & Bridge]
-        CMD[tauri::command / Rust Backend]
+        CMD["tauri::command / Rust Backend"]
     end
 
     subgraph Execution [Simulation & AI Engines]
-        Agent[Multi-Provider LLM Client]
-        Sim[Python 3 Thermal & DRC Runner]
+        Agent["Multi-Provider LLM Client"]
+        Sim["Python 3 Thermal & DRC Runner"]
     end
 
     UI <-->|JSON IPC| CMD
     CMD <--> Agent
     CMD <--> Sim
-    
+
     style Client fill:#16191f,stroke:#3b82f6,stroke-width:2px,color:#fff
     style Execution fill:#1f2937,stroke:#10b981,stroke-width:2px,color:#fff
     style IPC fill:#374151,stroke:#f59e0b,stroke-width:2px,color:#fff
@@ -68,6 +68,7 @@ graph TD
 ### Prerequisites
 
 Ensure you have the following installed on your host machine:
+
 - [Node.js](https://nodejs.org/) (v20+)
 - [pnpm](https://pnpm.io/) (v9+)
 - [Rust Toolchain](https://rustup.rs/) (stable, 1.84+)
@@ -76,6 +77,7 @@ Ensure you have the following installed on your host machine:
 ### Installation & Launch
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/your-org/aha-designer.git
    cd aha-designer
@@ -83,11 +85,13 @@ Ensure you have the following installed on your host machine:
 
 2. **Initialize Python Environment:**
    Setup the simulation engine runner requirements.
+
    ```bash
    pip3 install -r simulator/python-runner/requirements.txt
    ```
 
 3. **Install Monorepo Dependencies:**
+
    ```bash
    pnpm install
    ```
@@ -101,15 +105,17 @@ Ensure you have the following installed on your host machine:
 ## 🧪 Testing and CI
 
 AHA Designer guarantees continuous quality through automated E2E testing and type checks.
+
 - **Check Rust Backend:** `cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml`
 - **Unit Tests (Rust):** `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`
 - **E2E Tests (Playwright):** `cd tests && pnpm test`
 
 ## 🛡️ License
 
-This project is licensed under the [MIT License](LICENSE). 
+This project is licensed under the [MIT License](LICENSE).
 
 ---
+
 <div align="center">
   <i>Redefining Hardware Architecture, One Prompt at a Time.</i>
 </div>
