@@ -50,9 +50,9 @@ export const useGraphStore = create<GraphState>()(temporal((set, get) => ({
     },
 
     addNode: (node) => {
-        set({
-            nodes: [...get().nodes, node]
-        });
+        set((state) => ({
+            nodes: [...state.nodes, node]
+        }));
     },
 
     setSelectedNode: (id) => {

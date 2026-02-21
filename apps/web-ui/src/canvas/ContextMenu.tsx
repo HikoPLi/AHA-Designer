@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useGraphStore } from '../store/useGraphStore';
 import { Trash2, Copy } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 interface ContextMenuProps {
     id: string;
@@ -12,6 +13,7 @@ interface ContextMenuProps {
 }
 
 export default function ContextMenu({ id, top, left, right, bottom, onClick }: ContextMenuProps) {
+    const { t } = useI18n();
     const { deleteNode, duplicateNode } = useGraphStore();
 
     const handleDuplicate = useCallback(() => {
@@ -49,14 +51,14 @@ export default function ContextMenu({ id, top, left, right, bottom, onClick }: C
                 onClick={handleDuplicate}
                 style={{ justifyContent: 'flex-start', border: 'none', background: 'transparent' }}
             >
-                <Copy size={14} style={{ marginRight: '8px' }} /> Duplicate
+                <Copy size={14} style={{ marginRight: '8px' }} /> {t("menu.duplicate")}
             </button>
             <button
                 className="btn"
                 onClick={handleDelete}
                 style={{ justifyContent: 'flex-start', border: 'none', background: 'transparent', color: '#ef4444' }}
             >
-                <Trash2 size={14} style={{ marginRight: '8px' }} /> Delete
+                <Trash2 size={14} style={{ marginRight: '8px' }} /> {t("menu.delete")}
             </button>
         </div>
     );

@@ -15,12 +15,14 @@ import HardwareNode from "./nodes/HardwareNode";
 import ContextMenu from "./ContextMenu";
 import { useGraphStore, AhaNode } from "../store/useGraphStore";
 import { Grid, Maximize, MousePointer2, Move } from "lucide-react";
+import { useI18n } from "../i18n";
 
 const nodeTypes = {
   hardware: HardwareNode,
 };
 
 export default function CanvasPane() {
+  const { t } = useI18n();
   const {
     nodes,
     edges,
@@ -30,7 +32,7 @@ export default function CanvasPane() {
     setSelectedNode,
     addNode,
   } = useGraphStore();
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const { screenToFlowPosition } = useReactFlow();
   const [menu, setMenu] = useState<any>(null);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -53,18 +55,76 @@ export default function CanvasPane() {
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
+    event.dataTransfer.dropEffect = "copy";
   }, []);
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
+      event.stopPropagation();
 
-      const type = event.dataTransfer.getData("application/reactflow");
-      const label = event.dataTransfer.getData("application/reactflow-label");
+      const payload = event.dataTransfer.getData("application/aha-node");
+      const plainPayload = event.dataTransfer.getData("text/plain");
+      const fallbackType = event.dataTransfer.getData("application/reactflow");
+      const fallbackLabel = event.dataTransfer.getData(
+        "application/reactflow-label",
+      );
+
+      let type = fallbackType;
+      let label = fallbackLabel;
+      let tdp = fallbackType === "SoC" ? 15 : 2;
+      let manufacturer: string | undefined;
+      let mpn: string | undefined;
+      let description: string | undefined;
+      let datasheetUrl: string | undefined;
+      let buyUrl: string | undefined;
+      let stock: number | undefined;
+
+      const parsePayload = (raw: string) => {
+        try {
+          const parsed = JSON.parse(raw) as {
+            ahaDrag?: boolean;
+            type?: string;
+            label?: string;
+            tdp?: number;
+            mfg?: string;
+            mpn?: string;
+            description?: string;
+            datasheetUrl?: string;
+            buyUrl?: string;
+            stock?: number;
+          };
+
+          if (!parsed.ahaDrag) {
+            return;
+          }
+
+          type = parsed.type ?? type;
+          label = parsed.label ?? label;
+          tdp = typeof parsed.tdp === "number" ? parsed.tdp : tdp;
+          manufacturer = parsed.mfg;
+          mpn = parsed.mpn;
+          description = parsed.description;
+          datasheetUrl = parsed.datasheetUrl;
+          buyUrl = parsed.buyUrl;
+          stock = parsed.stock;
+        } catch (error) {
+          console.warn("Failed to parse drop payload:", error);
+        }
+      };
+
+      if (payload) {
+        parsePayload(payload);
+      } else if (plainPayload) {
+        // Safari/WKWebView fallback: custom mime types may be stripped.
+        parsePayload(plainPayload);
+      }
 
       if (typeof type === "undefined" || !type) {
         return;
+      }
+      if (typeof label === "undefined" || !label) {
+        label = "New Component";
       }
 
       const position = screenToFlowPosition({
@@ -76,7 +136,17 @@ export default function CanvasPane() {
         id: uuidv4(),
         type: "hardware",
         position,
-        data: { label, category: type, tdp_w: type === "SoC" ? 15 : 2 },
+        data: {
+          label,
+          category: type,
+          tdp_w: tdp,
+          manufacturer,
+          mpn,
+          description,
+          datasheet_url: datasheetUrl,
+          buy_url: buyUrl,
+          stock,
+        },
       };
 
       addNode(newNode);
@@ -108,12 +178,7 @@ export default function CanvasPane() {
   const onPaneClick = useCallback(() => setMenu(null), [setMenu]);
 
   return (
-    <div
-      className="canvas-area"
-      onDrop={onDrop}
-      onDragOver={onDragOver}
-      ref={ref}
-    >
+    <div className="canvas-area" ref={ref} onDrop={onDrop} onDragOver={onDragOver}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -129,17 +194,16 @@ export default function CanvasPane() {
         selectionOnDrag={interactionMode === "select"}
         panOnScroll={true}
         zoomOnScroll={true}
-        fitView
       >
         <Controls />
         <MiniMap
-          nodeStrokeColor="#ffffff"
-          nodeColor="#16191f"
-          maskColor="rgba(0,0,0,0.4)"
+          nodeStrokeColor="var(--minimap-stroke)"
+          nodeColor="var(--minimap-node)"
+          maskColor="var(--minimap-mask)"
         />
         {showGrid && (
           <Background
-            color="#2a2e37"
+            color="var(--grid-color)"
             gap={16}
             variant={BackgroundVariant.Dots}
           />
@@ -164,10 +228,10 @@ export default function CanvasPane() {
               style={{
                 background:
                   interactionMode === "select"
-                    ? "rgba(255,255,255,0.1)"
+                    ? "var(--accent-soft)"
                     : "transparent",
               }}
-              title="Select Mode"
+              title={t("canvas.selectMode")}
             >
               <MousePointer2 size={16} />
             </button>
@@ -177,10 +241,10 @@ export default function CanvasPane() {
               style={{
                 background:
                   interactionMode === "pan"
-                    ? "rgba(255,255,255,0.1)"
+                    ? "var(--accent-soft)"
                     : "transparent",
               }}
-              title="Pan Mode"
+              title={t("canvas.panMode")}
             >
               <Move size={16} />
             </button>
@@ -197,7 +261,7 @@ export default function CanvasPane() {
               style={{
                 color: showGrid ? "var(--accent-primary)" : "var(--text-muted)",
               }}
-              title="Toggle Grid"
+              title={t("canvas.toggleGrid")}
             >
               <Grid size={16} />
             </button>
@@ -209,7 +273,7 @@ export default function CanvasPane() {
                   ? "var(--accent-primary)"
                   : "var(--text-muted)",
               }}
-              title="Toggle Snap to Grid"
+              title={t("canvas.toggleSnap")}
             >
               <Maximize size={16} />
             </button>
@@ -226,7 +290,7 @@ export default function CanvasPane() {
               border: "1px solid var(--border-color)",
             }}
           >
-            Hardware Architecture Canvas
+            {t("canvas.title")}
           </div>
         </Panel>
         {menu && <ContextMenu onClick={onPaneClick} {...menu} />}

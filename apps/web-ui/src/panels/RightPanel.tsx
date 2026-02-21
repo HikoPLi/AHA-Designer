@@ -1,16 +1,77 @@
 import { useGraphStore } from "../store/useGraphStore";
-import { Settings, Bot, PlayCircle, GitBranch, RefreshCw, Check, TerminalSquare } from "lucide-react";
-import { useState, useEffect } from "react";
+import {
+  Settings,
+  Bot,
+  PlayCircle,
+  GitBranch,
+  RefreshCw,
+  TerminalSquare,
+  Flame,
+  Gauge,
+  CircuitBoard,
+} from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { synthesizeArchitecture } from "./aiService";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useI18n } from "../i18n";
 
 export default function RightPanel() {
+  const { t } = useI18n();
   const { nodes, selectedNodeId, updateNodeData, setGraph } = useGraphStore();
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
-  const [activeTab, setActiveTab] = useState<"properties" | "ai" | "git">("properties");
+  const metrics = useMemo(() => {
+    const totalNodes = nodes.length;
+    const totalPower = nodes.reduce((acc, node) => acc + (node.data?.tdp_w || 0), 0);
+    const avgPower = totalNodes ? totalPower / totalNodes : 0;
+    const highPowerNodes = nodes.filter((node) => (node.data?.tdp_w || 0) >= 10).length;
+
+    const distributionMap = nodes.reduce<Record<string, number>>((acc, node) => {
+      const category = String(node.data?.category || "Unknown");
+      acc[category] = (acc[category] || 0) + (node.data?.tdp_w || 0);
+      return acc;
+    }, {});
+    const distribution = Object.entries(distributionMap)
+      .sort(([, a], [, b]) => b - a)
+      .map(([category, power]) => ({
+        category,
+        power,
+        ratio: totalPower > 0 ? (power / totalPower) * 100 : 0,
+      }));
+
+    const topConsumers = [...nodes]
+      .sort((a, b) => (b.data?.tdp_w || 0) - (a.data?.tdp_w || 0))
+      .slice(0, 3)
+      .map((node) => ({
+        id: node.id,
+        label: String(node.data?.label || node.id),
+        category: String(node.data?.category || "Unknown"),
+        power: node.data?.tdp_w || 0,
+      }));
+
+    return {
+      totalNodes,
+      totalPower,
+      avgPower,
+      highPowerNodes,
+      distribution,
+      topConsumers,
+    };
+  }, [nodes]);
+
+  const inputStyle = {
+    background: "var(--input-bg)",
+    border: "1px solid var(--input-border)",
+    color: "var(--text-primary)",
+    padding: "6px",
+    borderRadius: "4px",
+  };
+
+  const [activeTab, setActiveTab] = useState<"properties" | "ai" | "git">(
+    "properties",
+  );
   const [simulationResult, setSimulationResult] = useState<any>(null);
 
   // Git State
@@ -22,7 +83,7 @@ export default function RightPanel() {
     setIsGitRunning(true);
     try {
       const res: string = await invoke("execute_git_command", { args });
-      setGitOutput(res || "Command executed successfully (no output).");
+      setGitOutput(res || t("right.commandExecuted"));
     } catch (e) {
       setGitOutput(`Error:\n${e}`);
     } finally {
@@ -56,24 +117,87 @@ export default function RightPanel() {
   const [apiKey, setApiKey] = useState(
     localStorage.getItem("OPENAI_API_KEY") || "",
   );
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+
+  const fetchModels = async (
+    currentBaseUrl: string,
+    currentApiKey: string,
+    currentProvider: string,
+  ) => {
+    if (!currentBaseUrl) return;
+    if (currentProvider !== "ollama" && !currentApiKey) return;
+
+    setIsLoadingModels(true);
+    try {
+      const endpoint = currentBaseUrl.replace(/\/$/, "") + "/models";
+      const res = await fetch(endpoint, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(currentApiKey
+            ? { Authorization: `Bearer ${currentApiKey}` }
+            : {}),
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.data && Array.isArray(data.data)) {
+          const models = data.data.map((m: any) => m.id);
+          setAvailableModels(models);
+          if (models.length > 0 && !models.includes(modelName)) {
+            setModelName(models[0]);
+            localStorage.setItem("AI_MODEL", models[0]);
+          }
+        } else if (data && data.models && Array.isArray(data.models)) {
+          // Ollama format
+          const models = data.models.map((m: any) => m.name);
+          setAvailableModels(models);
+          if (models.length > 0 && !models.includes(modelName)) {
+            setModelName(models[0]);
+            localStorage.setItem("AI_MODEL", models[0]);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch models:", e);
+    } finally {
+      setIsLoadingModels(false);
+    }
+  };
+
+  useEffect(() => {
+    // Fetch models when provider, baseUrl, or apiKey changes
+    fetchModels(baseUrl, apiKey, provider);
+  }, [baseUrl, apiKey, provider]);
 
   const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const p = e.target.value;
     setProvider(p);
     localStorage.setItem("AI_PROVIDER", p);
+
+    let newBaseUrl = "";
+    let newModelName = "";
+
     if (p === "openai") {
-      setBaseUrl("https://api.openai.com/v1");
-      setModelName("gpt-4o");
+      newBaseUrl = "https://api.openai.com/v1";
+      newModelName = "gpt-4o";
     } else if (p === "deepseek") {
-      setBaseUrl("https://api.deepseek.com/v1");
-      setModelName("deepseek-chat");
+      newBaseUrl = "https://api.deepseek.com/v1";
+      newModelName = "deepseek-chat";
     } else if (p === "qwen") {
-      setBaseUrl("https://dashscope.aliyuncs.com/compatible-mode/v1");
-      setModelName("qwen-plus");
+      newBaseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+      newModelName = "qwen-plus";
     } else if (p === "ollama") {
-      setBaseUrl("http://localhost:11434/v1");
-      setModelName("llama3");
+      newBaseUrl = "http://localhost:11434/v1";
+      newModelName = "llama3";
     }
+
+    setBaseUrl(newBaseUrl);
+    localStorage.setItem("AI_BASE_URL", newBaseUrl);
+    setModelName(newModelName);
+    localStorage.setItem("AI_MODEL", newModelName);
   };
 
   const handleBaseUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -122,7 +246,7 @@ export default function RightPanel() {
     if (!chatInput.trim() || (provider !== "ollama" && !apiKey)) {
       setChatLog((prev) => [
         ...prev,
-        { role: "ai", text: "Please check your API Key and enter a prompt." },
+        { role: "ai", text: t("right.aiMissing") },
       ]);
       return;
     }
@@ -178,7 +302,7 @@ export default function RightPanel() {
               size={18}
               style={{ verticalAlign: "middle", marginRight: "4px" }}
             />{" "}
-            Properties
+            {t("right.tab.properties")}
           </button>
           <button
             onClick={() => setActiveTab("ai")}
@@ -197,7 +321,7 @@ export default function RightPanel() {
               size={18}
               style={{ verticalAlign: "middle", marginRight: "4px" }}
             />{" "}
-            Copilot
+            {t("right.tab.ai")}
           </button>
           <button
             onClick={() => setActiveTab("git")}
@@ -216,7 +340,7 @@ export default function RightPanel() {
               size={18}
               style={{ verticalAlign: "middle", marginRight: "4px" }}
             />{" "}
-            Git
+            {t("right.tab.git")}
           </button>
         </div>
       </div>
@@ -225,78 +349,144 @@ export default function RightPanel() {
         {activeTab === "properties" ? (
           <div>
             {!selectedNode ? (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "16px",
-                }}
-              >
+              <div className="overview-stack">
                 <p style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-                  Select a node on the canvas to edit its properties.
+                  {t("right.selectNode")}
                 </p>
 
-                <div
-                  style={{
-                    background: "rgba(255,255,255,0.02)",
-                    padding: "12px",
-                    borderRadius: "6px",
-                    border: "1px solid var(--border-color)",
-                  }}
-                >
-                  <h4 style={{ marginBottom: "8px", fontSize: "13px" }}>
-                    System Overview
-                  </h4>
-                  <div
-                    style={{
-                      fontSize: "12px",
-                      color: "var(--text-secondary)",
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "8px",
-                    }}
-                  >
-                    <span>Total Nodes:</span> <span>{nodes.length}</span>
-                    <span>Est. Power:</span>{" "}
-                    <span>
-                      {nodes
-                        .reduce((acc, n) => acc + (n.data?.tdp_w || 0), 0)
-                        .toFixed(1)}{" "}
-                      W
-                    </span>
+                <div className="overview-card">
+                  <div className="overview-header">
+                    <div>
+                      <h4>{t("right.systemOverview")}</h4>
+                      <p>
+                        {simulationResult
+                          ? simulationResult.status === "success"
+                            ? t("right.validationHealthy")
+                            : t("right.validationIssues")
+                          : t("right.validationHealthy")}
+                      </p>
+                    </div>
+                    <div className="overview-badge">
+                      <CircuitBoard size={14} />
+                      AHA
+                    </div>
+                  </div>
+
+                  <div className="overview-kpis">
+                    <div className="overview-kpi">
+                      <div className="overview-kpi-label">
+                        <CircuitBoard size={13} />
+                        {t("right.totalNodes")}
+                      </div>
+                      <div className="overview-kpi-value">{metrics.totalNodes}</div>
+                    </div>
+                    <div className="overview-kpi">
+                      <div className="overview-kpi-label">
+                        <Flame size={13} />
+                        {t("right.totalPower")}
+                      </div>
+                      <div className="overview-kpi-value">
+                        {metrics.totalPower.toFixed(1)} W
+                      </div>
+                    </div>
+                    <div className="overview-kpi">
+                      <div className="overview-kpi-label">
+                        <Gauge size={13} />
+                        {t("right.avgPower")}
+                      </div>
+                      <div className="overview-kpi-value">
+                        {metrics.avgPower.toFixed(2)} W
+                      </div>
+                    </div>
+                    <div className="overview-kpi">
+                      <div className="overview-kpi-label">
+                        <Flame size={13} />
+                        {t("right.hotspots")}
+                      </div>
+                      <div className="overview-kpi-value">{metrics.highPowerNodes}</div>
+                    </div>
+                  </div>
+
+                  <div className="overview-section">
+                    <div className="overview-section-title">
+                      {t("right.energyDistribution")}
+                    </div>
+                    {metrics.distribution.length === 0 ? (
+                      <p className="overview-empty">{t("right.emptyPowerData")}</p>
+                    ) : (
+                      metrics.distribution.map((entry) => (
+                        <div key={entry.category} className="overview-row">
+                          <div className="overview-row-title">
+                            <span>{entry.category}</span>
+                            <span>{entry.power.toFixed(1)} W</span>
+                          </div>
+                          <div className="overview-bar-track">
+                            <div
+                              className="overview-bar-fill"
+                              style={{ width: `${Math.max(6, entry.ratio)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="overview-section">
+                    <div className="overview-section-title">{t("right.topConsumers")}</div>
+                    {metrics.topConsumers.length === 0 ? (
+                      <p className="overview-empty">{t("right.emptyPowerData")}</p>
+                    ) : (
+                      <div className="overview-list">
+                        {metrics.topConsumers.map((consumer) => (
+                          <div key={consumer.id} className="overview-list-item">
+                            <div>
+                              <div className="overview-list-title">{consumer.label}</div>
+                              <div className="overview-list-meta">{consumer.category}</div>
+                            </div>
+                            <div className="overview-list-value">
+                              {consumer.power.toFixed(1)} W
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <button
                     className="btn primary"
                     style={{
                       width: "100%",
-                      marginTop: "16px",
+                      marginTop: "8px",
                       justifyContent: "center",
                     }}
                     onClick={runSimulation}
                   >
-                    <PlayCircle size={16} /> Run Validation Loop
+                    <PlayCircle size={16} /> {t("right.runValidation")}
                   </button>
 
                   {simulationResult && (
                     <div
                       style={{
-                        marginTop: "16px",
+                        marginTop: "14px",
                         fontSize: "12px",
                         color:
                           simulationResult.status === "success"
-                            ? "#10b981"
-                            : "#ef4444",
+                            ? "var(--success-color)"
+                            : "var(--danger-color)",
                       }}
                     >
-                      <p>Status: {simulationResult.status}</p>
+                      <p>
+                        {t("right.status")}: {simulationResult.status}
+                      </p>
                       <pre
                         style={{
                           overflowX: "auto",
-                          background: "#000",
+                          background: "var(--input-bg)",
+                          border: "1px solid var(--input-border)",
                           padding: "8px",
-                          borderRadius: "4px",
-                          marginTop: "4px",
+                          borderRadius: "6px",
+                          marginTop: "6px",
+                          color: "var(--text-primary)",
                         }}
                       >
                         {JSON.stringify(simulationResult, null, 2)}
@@ -313,7 +503,9 @@ export default function RightPanel() {
                   gap: "12px",
                 }}
               >
-                <h4 style={{ marginBottom: "8px" }}>Component Instance</h4>
+                <h4 style={{ marginBottom: "8px" }}>
+                  {t("right.componentInstance")}
+                </h4>
 
                 <div
                   style={{
@@ -325,7 +517,7 @@ export default function RightPanel() {
                   <label
                     style={{ fontSize: "12px", color: "var(--text-secondary)" }}
                   >
-                    Designator / Label
+                    {t("right.designator")}
                   </label>
                   <input
                     type="text"
@@ -333,15 +525,80 @@ export default function RightPanel() {
                     onChange={(e) =>
                       updateNodeData(selectedNode.id, "label", e.target.value)
                     }
-                    style={{
-                      background: "#000",
-                      border: "1px solid var(--border-color)",
-                      color: "#fff",
-                      padding: "6px",
-                      borderRadius: "4px",
-                    }}
+                    style={inputStyle}
                   />
                 </div>
+
+                {selectedNode.data.manufacturer && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                    }}
+                  >
+                    <label
+                      style={{ fontSize: "12px", color: "var(--text-secondary)" }}
+                    >
+                      {t("right.manufacturer")}
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedNode.data.manufacturer}
+                      disabled
+                      style={{
+                        background: "var(--surface-soft)",
+                        border: "1px solid transparent",
+                        color: "var(--text-muted)",
+                        padding: "6px",
+                        borderRadius: "4px",
+                      }}
+                    />
+                  </div>
+                )}
+
+                {selectedNode.data.mpn && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                    }}
+                  >
+                    <label
+                      style={{ fontSize: "12px", color: "var(--text-secondary)" }}
+                    >
+                      {t("right.mpn")}
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedNode.data.mpn}
+                      disabled
+                      style={{
+                        background: "var(--surface-soft)",
+                        border: "1px solid transparent",
+                        color: "var(--text-muted)",
+                        padding: "6px",
+                        borderRadius: "4px",
+                      }}
+                    />
+                  </div>
+                )}
+
+                {selectedNode.data.datasheet_url && (
+                  <a
+                    href={selectedNode.data.datasheet_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: "var(--accent-primary)",
+                      fontSize: "12px",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {t("right.openDatasheet")}
+                  </a>
+                )}
 
                 <div
                   style={{
@@ -353,14 +610,14 @@ export default function RightPanel() {
                   <label
                     style={{ fontSize: "12px", color: "var(--text-secondary)" }}
                   >
-                    Category
+                    {t("right.category")}
                   </label>
                   <input
                     type="text"
                     value={selectedNode.data.category}
                     disabled
                     style={{
-                      background: "rgba(255,255,255,0.05)",
+                      background: "var(--surface-soft)",
                       border: "1px solid transparent",
                       color: "var(--text-muted)",
                       padding: "6px",
@@ -379,7 +636,7 @@ export default function RightPanel() {
                   <label
                     style={{ fontSize: "12px", color: "var(--text-secondary)" }}
                   >
-                    Max TDP (Watts)
+                    {t("right.maxTdp")}
                   </label>
                   <input
                     type="number"
@@ -391,19 +648,13 @@ export default function RightPanel() {
                         parseFloat(e.target.value),
                       )
                     }
-                    style={{
-                      background: "#000",
-                      border: "1px solid var(--border-color)",
-                      color: "#fff",
-                      padding: "6px",
-                      borderRadius: "4px",
-                    }}
+                    style={inputStyle}
                   />
                 </div>
               </div>
             )}
           </div>
-        ) : (
+        ) : activeTab === "ai" ? (
           <div
             style={{
               display: "flex",
@@ -418,15 +669,15 @@ export default function RightPanel() {
               <label
                 style={{ fontSize: "12px", color: "var(--text-secondary)" }}
               >
-                AI Provider
+                {t("right.aiProvider")}
               </label>
               <select
                 value={provider}
                 onChange={handleProviderChange}
                 style={{
-                  background: "#000",
+                  background: "var(--input-bg)",
                   border: "1px solid var(--border-color)",
-                  color: "#fff",
+                  color: "var(--text-primary)",
                   padding: "6px",
                   borderRadius: "4px",
                 }}
@@ -449,16 +700,16 @@ export default function RightPanel() {
                 <label
                   style={{ fontSize: "12px", color: "var(--text-secondary)" }}
                 >
-                  Base URL
+                  {t("right.baseUrl")}
                 </label>
                 <input
                   type="text"
                   value={baseUrl}
                   onChange={handleBaseUrlChange}
                   style={{
-                    background: "#000",
+                    background: "var(--input-bg)",
                     border: "1px solid var(--border-color)",
-                    color: "#fff",
+                    color: "var(--text-primary)",
                     padding: "6px",
                     borderRadius: "4px",
                   }}
@@ -475,20 +726,53 @@ export default function RightPanel() {
                 <label
                   style={{ fontSize: "12px", color: "var(--text-secondary)" }}
                 >
-                  Model
+                  {t("right.model")}{" "}
+                  {isLoadingModels && (
+                    <span
+                      style={{
+                        fontSize: "10px",
+                        color: "var(--accent-primary)",
+                      }}
+                    >
+                      ({t("right.loading")})
+                    </span>
+                  )}
                 </label>
-                <input
-                  type="text"
-                  value={modelName}
-                  onChange={handleModelChange}
-                  style={{
-                    background: "#000",
-                    border: "1px solid var(--border-color)",
-                    color: "#fff",
-                    padding: "6px",
-                    borderRadius: "4px",
-                  }}
-                />
+                {availableModels.length > 0 ? (
+                  <select
+                    value={modelName}
+                    onChange={(e) => {
+                      setModelName(e.target.value);
+                      localStorage.setItem("AI_MODEL", e.target.value);
+                    }}
+                    style={{
+                      background: "var(--input-bg)",
+                      border: "1px solid var(--border-color)",
+                      color: "var(--text-primary)",
+                      padding: "6px",
+                      borderRadius: "4px",
+                    }}
+                  >
+                    {availableModels.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={modelName}
+                    onChange={handleModelChange}
+                    style={{
+                      background: "var(--input-bg)",
+                      border: "1px solid var(--border-color)",
+                      color: "var(--text-primary)",
+                      padding: "6px",
+                      borderRadius: "4px",
+                    }}
+                  />
+                )}
               </div>
             </div>
             <div
@@ -497,34 +781,34 @@ export default function RightPanel() {
               <label
                 style={{ fontSize: "12px", color: "var(--text-secondary)" }}
               >
-                API Key {provider === "ollama" && "(Optional)"}
+                {t("right.apiKey")}{" "}
+                {provider === "ollama" && `(${t("right.optional")})`}
               </label>
               <input
                 type="password"
                 value={apiKey}
                 onChange={handleKeyChange}
                 placeholder={
-                  provider === "ollama" ? "Not required for local" : "sk-..."
+                  provider === "ollama" ? t("right.notRequiredLocal") : "sk-..."
                 }
                 style={{
-                  background: "#000",
+                  background: "var(--input-bg)",
                   border: "1px solid var(--border-color)",
-                  color: "#fff",
+                  color: "var(--text-primary)",
                   padding: "6px",
                   borderRadius: "4px",
                 }}
               />
             </div>
             <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
-              Describe your hardware requirements here. The AI will synthesize a
-              draft architecture layout.
+              {t("right.aiDesc")}
             </p>
             <div
               style={{
                 flex: 1,
                 border: "1px solid var(--border-color)",
                 borderRadius: "6px",
-                background: "rgba(0,0,0,0.3)",
+                background: "var(--surface-soft)",
                 padding: "8px",
                 display: "flex",
                 flexDirection: "column",
@@ -545,8 +829,8 @@ export default function RightPanel() {
                     style={{
                       background:
                         log.role === "user"
-                          ? "rgba(59, 130, 246, 0.2)"
-                          : "rgba(255, 255, 255, 0.05)",
+                          ? "var(--accent-soft)"
+                          : "var(--surface-soft)",
                       alignSelf:
                         log.role === "user" ? "flex-end" : "flex-start",
                       padding: "12px",
@@ -573,7 +857,7 @@ export default function RightPanel() {
                 ))}
                 {isSynthesizing && (
                   <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                    AI is synthesizing architecture...
+                    {t("right.aiSynthesizing")}
                   </div>
                 )}
               </div>
@@ -583,12 +867,12 @@ export default function RightPanel() {
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAISubmit()}
-                  placeholder="I need an Edge AI grading system..."
+                  placeholder={t("right.aiPlaceholder")}
                   style={{
                     flex: 1,
-                    background: "#000",
+                    background: "var(--input-bg)",
                     border: "1px solid var(--border-color)",
-                    color: "#fff",
+                    color: "var(--text-primary)",
                     padding: "6px",
                     borderRadius: "4px",
                   }}
@@ -598,41 +882,85 @@ export default function RightPanel() {
                   onClick={handleAISubmit}
                   disabled={isSynthesizing}
                 >
-                  Send
+                  {t("right.send")}
                 </button>
               </div>
             </div>
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px", height: "100%" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h4 style={{ margin: 0, fontSize: "14px" }}>Git Integration</h4>
-              <button 
-                className="btn" 
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+              height: "100%",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h4 style={{ margin: 0, fontSize: "14px" }}>
+                {t("right.gitIntegration")}
+              </h4>
+              <button
+                className="btn"
                 onClick={() => runGitCommand(["status"])}
                 style={{ padding: "4px 8px" }}
               >
-                <RefreshCw size={14} /> Status
-              </button>
-            </div>
-            
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button className="btn" onClick={() => runGitCommand(["add", "."])} style={{ flex: 1 }}>
-                Add All
-              </button>
-              <button className="btn" onClick={() => runGitCommand(["pull"])} style={{ flex: 1 }}>
-                Pull
-              </button>
-              <button className="btn" onClick={() => runGitCommand(["push"])} style={{ flex: 1 }}>
-                Push
+                <RefreshCw size={14} /> {t("right.gitStatus")}
               </button>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-              <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Execute Command</label>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                className="btn"
+                onClick={() => runGitCommand(["add", "."])}
+                style={{ flex: 1 }}
+              >
+                {t("right.gitAddAll")}
+              </button>
+              <button
+                className="btn"
+                onClick={() => runGitCommand(["pull"])}
+                style={{ flex: 1 }}
+              >
+                {t("right.gitPull")}
+              </button>
+              <button
+                className="btn"
+                onClick={() => runGitCommand(["push"])}
+                style={{ flex: 1 }}
+              >
+                {t("right.gitPush")}
+              </button>
+            </div>
+
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "4px" }}
+            >
+              <label
+                style={{ fontSize: "12px", color: "var(--text-secondary)" }}
+              >
+                {t("right.executeCommand")}
+              </label>
               <div style={{ display: "flex", gap: "8px" }}>
                 <div style={{ position: "relative", flex: 1 }}>
-                  <span style={{ position: "absolute", left: "8px", top: "8px", color: "var(--text-muted)", fontSize: "12px", fontFamily: "monospace" }}>git</span>
+                  <span
+                    style={{
+                      position: "absolute",
+                      left: "8px",
+                      top: "8px",
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    git
+                  </span>
                   <input
                     type="text"
                     value={gitCommand}
@@ -641,45 +969,65 @@ export default function RightPanel() {
                     placeholder="commit -m 'update'"
                     style={{
                       width: "100%",
-                      background: "#000",
+                      background: "var(--input-bg)",
                       border: "1px solid var(--border-color)",
-                      color: "#fff",
+                      color: "var(--text-primary)",
                       padding: "6px 8px 6px 32px",
                       borderRadius: "4px",
                       fontFamily: "monospace",
-                      fontSize: "12px"
+                      fontSize: "12px",
                     }}
                   />
                 </div>
-                <button 
-                  className="btn primary" 
+                <button
+                  className="btn primary"
                   onClick={handleGitSubmit}
                   disabled={isGitRunning}
                 >
-                  <TerminalSquare size={14} /> Run
+                  <TerminalSquare size={14} /> {t("right.run")}
                 </button>
               </div>
             </div>
 
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px", minHeight: 0 }}>
-              <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Output</label>
-              <div style={{ 
-                flex: 1, 
-                background: "#000", 
-                border: "1px solid var(--border-color)", 
-                borderRadius: "6px", 
-                padding: "8px",
-                overflowY: "auto",
-                fontFamily: "monospace",
-                fontSize: "11px",
-                color: "var(--text-primary)",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-all"
-              }}>
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                gap: "4px",
+                minHeight: 0,
+              }}
+            >
+              <label
+                style={{ fontSize: "12px", color: "var(--text-secondary)" }}
+              >
+                {t("right.output")}
+              </label>
+              <div
+                style={{
+                  flex: 1,
+                  background: "var(--input-bg)",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: "6px",
+                  padding: "8px",
+                  overflowY: "auto",
+                  fontFamily: "monospace",
+                  fontSize: "11px",
+                  color: "var(--text-primary)",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
+                }}
+              >
                 {isGitRunning ? (
-                  <span style={{ color: "var(--text-muted)" }}>Executing...</span>
+                  <span style={{ color: "var(--text-muted)" }}>
+                    {t("right.executing")}
+                  </span>
                 ) : (
-                  gitOutput || <span style={{ color: "var(--text-muted)" }}>No output yet. Run a command to see results.</span>
+                  gitOutput || (
+                    <span style={{ color: "var(--text-muted)" }}>
+                      {t("right.noOutput")}
+                    </span>
+                  )
                 )}
               </div>
             </div>

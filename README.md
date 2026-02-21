@@ -33,6 +33,18 @@ Transform hardware engineering from manual schematic drafting into intelligent, 
 - **� BOM Export Pipeline**
   One-click extraction of your entire architecture into a standards-compliant CSV Bill of Materials for downstream procurement.
 
+## 🚀 Production-Grade Interactions
+
+- **Workspace File I/O (`.aha.json`)**
+  Load/save complete architecture state through native desktop dialogs (Rust/Tauri backend file commands, not mock local-only state).
+- **Live Component Search (TrustedParts API)**
+  Query real market inventory and offers, then drag real parts into the canvas as nodes with manufacturer/MPN/offer metadata.
+- **Advanced Editing UX**
+  Keyboard-first operations for power users:
+  `Ctrl/Cmd+S` save workspace, `Ctrl/Cmd+D` duplicate selected node, `Delete/Backspace` remove selected node.
+- **Auto-Recovery Draft**
+  Continuous local draft persistence to protect in-progress work during crashes or forced restarts.
+
 ## 🏗️ Architecture Stack
 
 AHA Designer uses a modern, blazingly fast polyglot monorepo stack designed for high-performance and deep OS integration.

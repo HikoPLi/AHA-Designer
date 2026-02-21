@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { HardDrive, Cpu, Radio, Zap, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import type { AhaNode } from '../../store/useGraphStore';
 
 // Map categories to icons
 const CategoryIcon = ({ category, size = 16 }: { category: string; size?: number }) => {
@@ -17,7 +18,7 @@ const CategoryIcon = ({ category, size = 16 }: { category: string; size?: number
     }
 };
 
-export default memo(function HardwareNode({ data, selected }: NodeProps) {
+export default memo(function HardwareNode({ data, selected }: NodeProps<AhaNode>) {
     // We can show badges based on arbitrary data fields passed to the node 
     const hasError = data.error === true;
     const isHealthy = data.healthy === true;
@@ -62,6 +63,8 @@ export default memo(function HardwareNode({ data, selected }: NodeProps) {
             <div style={{ padding: '8px 12px', fontSize: '10px', color: 'var(--text-secondary)' }}>
                 <div><span style={{ color: 'var(--text-muted)' }}>Class: </span>{String(data.category)}</div>
                 <div><span style={{ color: 'var(--text-muted)' }}>Power: </span>{data.tdp_w ? `${data.tdp_w} W` : 'N/A'}</div>
+                {data.manufacturer && <div><span style={{ color: 'var(--text-muted)' }}>Mfr: </span>{String(data.manufacturer)}</div>}
+                {data.stock != null && <div><span style={{ color: 'var(--text-muted)' }}>Stock: </span>{String(data.stock)}</div>}
             </div>
 
             {/* Ports / Handles */}
@@ -70,7 +73,7 @@ export default memo(function HardwareNode({ data, selected }: NodeProps) {
                 type="target"
                 position={Position.Left}
                 id="data-in"
-                style={{ background: '#3b82f6', width: '8px', height: '8px', border: '1px solid #16191f' }}
+                style={{ background: '#3b82f6', width: '8px', height: '8px', border: '1px solid var(--bg-panel-solid)' }}
             />
 
             {/* Right Data Ports */}
@@ -78,7 +81,7 @@ export default memo(function HardwareNode({ data, selected }: NodeProps) {
                 type="source"
                 position={Position.Right}
                 id="data-out"
-                style={{ background: '#3b82f6', width: '8px', height: '8px', border: '1px solid #16191f' }}
+                style={{ background: '#3b82f6', width: '8px', height: '8px', border: '1px solid var(--bg-panel-solid)' }}
             />
 
             {/* Top Power Input */}
@@ -86,7 +89,7 @@ export default memo(function HardwareNode({ data, selected }: NodeProps) {
                 type="target"
                 position={Position.Top}
                 id="pwr-in"
-                style={{ background: '#ef4444', width: '8px', height: '8px', border: '1px solid #16191f' }}
+                style={{ background: '#ef4444', width: '8px', height: '8px', border: '1px solid var(--bg-panel-solid)' }}
             />
 
             {/* Bottom Power Output (for PMICs etc) */}
@@ -94,7 +97,7 @@ export default memo(function HardwareNode({ data, selected }: NodeProps) {
                 type="source"
                 position={Position.Bottom}
                 id="pwr-out"
-                style={{ background: '#ef4444', width: '8px', height: '8px', border: '1px solid #16191f', borderRadius: '4px' }}
+                style={{ background: '#ef4444', width: '8px', height: '8px', border: '1px solid var(--bg-panel-solid)', borderRadius: '4px' }}
             />
         </div>
     );
