@@ -1,0 +1,26 @@
+{
+    "productName": "AHA Designer",
+    "version": "0.1.0",
+    "identifier": "com.ahadesigner.app",
+    "build": {
+        "beforeDevCommand": "pnpm --filter web-ui dev",
+        "beforeBuildCommand": "pnpm --filter web-ui build",
+        "devUrl": "http://localhost:5173",
+        "frontendDist": "../../web-ui/dist"
+    },
+    "app": {
+        "windows": [
+            {
+                "title": "AHA Designer",
+                "width": 1280,
+                "height": 800,
+                "minWidth": 800,
+                "minHeight": 600,
+                "center": true
+            }
+        ],
+        "security": {
+            "csp": null
+        }
+    }
+}

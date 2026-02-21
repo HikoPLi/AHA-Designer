@@ -1,0 +1,6 @@
+{
+    "name": "aha-core",
+    "version": "0.1.0",
+    "main": "index.js",
+    "description": "Shared Domain Models"
+}

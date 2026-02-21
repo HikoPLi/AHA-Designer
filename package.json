@@ -1,0 +1,15 @@
+{
+  "name": "aha-designer-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AHA Designer - AI Hardware Architect",
+  "scripts": {
+    "dev": "pnpm --filter web-ui dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "tauri": "pnpm --filter desktop tauri"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2"
+  }
+}
